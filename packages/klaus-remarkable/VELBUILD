@@ -1,7 +1,7 @@
 maintainer="Billy Gigurtsis <bgigurtsis@users.noreply.github.com>"
 pkgname=klaus-remarkable
 pkgver=0.1.0
-pkgrel=0
+pkgrel=1
 upstream_author="bgigurtsis"
 category="utilities"
 pkgdesc="Manage the Paper Pure screenshot service used by Klaus"
@@ -33,6 +33,20 @@ install_service() {
 	/home/root/.vellum/bin/mount-restore
 }
 
+reload_framebuffer_bridge() {
+	systemctl restart xochitl
+	i=0
+	while [ "$i" -lt 30 ]; do
+		if systemctl is-active --quiet xochitl; then
+			return
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo "xochitl did not become active after loading the Paper Pure framebuffer bridge" >&2
+	return 1
+}
+
 ensure_credentials() {
 	config_dir=/home/root/.config/klaus-remarkable
 	config=$config_dir/service.env
@@ -59,6 +73,7 @@ EOF
 
 postinstall() {
 	ensure_credentials
+	reload_framebuffer_bridge
 	install_service
 	echo
 	/home/root/.vellum/bin/klaus-remarkable-pairing
