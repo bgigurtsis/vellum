@@ -1,7 +1,7 @@
 maintainer="Billy Gigurtsis <bgigurtsis@users.noreply.github.com>"
 pkgname=klaus-remarkable
 pkgver=0.1.0
-pkgrel=14
+pkgrel=15
 upstream_author="bgigurtsis"
 category="utilities"
 pkgdesc="Manage the Paper Pure screenshot service used by Klaus"
@@ -60,12 +60,14 @@ install_service() {
 ensure_credentials() {
 	config_dir=/home/root/.config/klaus-remarkable
 	config=$config_dir/service.env
-	if [ -s "$config" ]; then
+	if [ -s "$config" ] &&
+		grep -q '^RK_SERVER_USERNAME=..*' "$config" &&
+		grep -q '^RK_SERVER_PASSWORD=..*' "$config"; then
 		return
 	fi
 	umask 077
 	mkdir -p "$config_dir"
-	password=$(dd if=/dev/urandom bs=24 count=1 2>/dev/null | base64 | tr -d '\n=')
+	password=$(/usr/bin/openssl rand -hex 24)
 	cat > "$config" <<EOF
 RK_SERVER_BIND_ADDR=:2001
 RK_SERVER_USERNAME=klaus
