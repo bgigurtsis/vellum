@@ -25,12 +25,14 @@ package() {
 
 install_service() {
 	/home/root/.vellum/bin/mount-rw
+	trap '/home/root/.vellum/bin/mount-restore' EXIT
 	install -Dm644 \
 		/home/root/.vellum/share/klaus-remarkable/klaus-remarkable.service \
 		/etc/systemd/system/klaus-remarkable.service
 	systemctl daemon-reload
 	systemctl enable --now klaus-remarkable.service
 	/home/root/.vellum/bin/mount-restore
+	trap - EXIT
 }
 
 reload_framebuffer_bridge() {
@@ -92,9 +94,11 @@ postosupgrade() {
 predeinstall() {
 	systemctl disable --now klaus-remarkable.service 2>/dev/null || true
 	/home/root/.vellum/bin/mount-rw
+	trap '/home/root/.vellum/bin/mount-restore' EXIT
 	rm -f /etc/systemd/system/klaus-remarkable.service
 	systemctl daemon-reload
 	/home/root/.vellum/bin/mount-restore
+	trap - EXIT
 	if [ "$VELLUM_PURGE" = "1" ]; then
 		rm -rf /home/root/.config/klaus-remarkable
 	fi
