@@ -1,7 +1,7 @@
 maintainer="Billy Gigurtsis <bgigurtsis@users.noreply.github.com>"
 pkgname=klaus-remarkable
 pkgver=0.1.0
-pkgrel=1
+pkgrel=14
 upstream_author="bgigurtsis"
 category="utilities"
 pkgdesc="Manage the Paper Pure screenshot service used by Klaus"
@@ -14,6 +14,7 @@ readmeurl="https://github.com/bgigurtsis/Klaus#remarkable-paper-pure"
 source="
 klaus-remarkable.service
 klaus-remarkable-pairing
+klaus-remarkable-prepare
 "
 
 package() {
@@ -21,32 +22,39 @@ package() {
 		"$pkgdir"/home/root/.vellum/share/klaus-remarkable/klaus-remarkable.service
 	install -Dm755 "$srcdir"/klaus-remarkable-pairing \
 		"$pkgdir"/home/root/.vellum/bin/klaus-remarkable-pairing
+	install -Dm755 "$srcdir"/klaus-remarkable-prepare \
+		"$pkgdir"/home/root/.vellum/bin/klaus-remarkable-prepare
 }
 
 install_service() {
-	/home/root/.vellum/bin/mount-rw
+	reboot_required=0
+	systemctl stop klaus-remarkable.service 2>/dev/null || true
+	[ ! -x /home/root/xovi/stock ] || /home/root/xovi/stock
+	if grep -q '^overlay.*/etc' /proc/mounts; then
+		mount --make-private /etc
+	fi
+	if ! /home/root/.vellum/bin/mount-rw; then
+		sleep 2
+		/home/root/.vellum/bin/mount-rw
+	fi
 	trap '/home/root/.vellum/bin/mount-restore' EXIT
-	install -Dm644 \
-		/home/root/.vellum/share/klaus-remarkable/klaus-remarkable.service \
+	mkdir -p /etc/systemd/system/multi-user.target.wants
+	rm -f /etc/systemd/system/klaus-remarkable.service
+	cp /home/root/.vellum/share/klaus-remarkable/klaus-remarkable.service \
 		/etc/systemd/system/klaus-remarkable.service
+	chmod 644 /etc/systemd/system/klaus-remarkable.service
+	ln -sfn /etc/systemd/system/klaus-remarkable.service \
+		/etc/systemd/system/multi-user.target.wants/klaus-remarkable.service
+	if ! /home/root/.vellum/bin/mount-restore; then
+		reboot_required=1
+	fi
+	trap - EXIT
+	[ ! -x /home/root/xovi/start ] || /home/root/xovi/start
 	systemctl daemon-reload
 	systemctl enable --now klaus-remarkable.service
-	/home/root/.vellum/bin/mount-restore
-	trap - EXIT
-}
-
-reload_framebuffer_bridge() {
-	systemctl restart xochitl
-	i=0
-	while [ "$i" -lt 30 ]; do
-		if systemctl is-active --quiet xochitl; then
-			return
-		fi
-		sleep 1
-		i=$((i + 1))
-	done
-	echo "xochitl did not become active after loading the Paper Pure framebuffer bridge" >&2
-	return 1
+	if [ "$reboot_required" = "1" ]; then
+		echo "Restart Paper Pure to restore its read-only system."
+	fi
 }
 
 ensure_credentials() {
@@ -57,7 +65,7 @@ ensure_credentials() {
 	fi
 	umask 077
 	mkdir -p "$config_dir"
-	password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+	password=$(dd if=/dev/urandom bs=24 count=1 2>/dev/null | base64 | tr -d '\n=')
 	cat > "$config" <<EOF
 RK_SERVER_BIND_ADDR=:2001
 RK_SERVER_USERNAME=klaus
@@ -75,10 +83,8 @@ EOF
 
 postinstall() {
 	ensure_credentials
-	reload_framebuffer_bridge
 	install_service
-	echo
-	/home/root/.vellum/bin/klaus-remarkable-pairing
+	echo "Paper Pure service installed. Run klaus-remarkable-pairing to display pairing details."
 }
 
 postupgrade() {
@@ -92,17 +98,33 @@ postosupgrade() {
 }
 
 predeinstall() {
+	reboot_required=0
 	systemctl disable --now klaus-remarkable.service 2>/dev/null || true
-	/home/root/.vellum/bin/mount-rw
+	[ ! -x /home/root/xovi/stock ] || /home/root/xovi/stock
+	if grep -q '^overlay.*/etc' /proc/mounts; then
+		mount --make-private /etc
+	fi
+	if ! /home/root/.vellum/bin/mount-rw; then
+		sleep 2
+		/home/root/.vellum/bin/mount-rw
+	fi
 	trap '/home/root/.vellum/bin/mount-restore' EXIT
 	rm -f /etc/systemd/system/klaus-remarkable.service
-	systemctl daemon-reload
-	/home/root/.vellum/bin/mount-restore
+	rm -f /etc/systemd/system/multi-user.target.wants/klaus-remarkable.service
+	if ! /home/root/.vellum/bin/mount-restore; then
+		reboot_required=1
+	fi
 	trap - EXIT
+	[ ! -x /home/root/xovi/start ] || /home/root/xovi/start
+	systemctl daemon-reload
+	if [ "$reboot_required" = "1" ]; then
+		echo "Restart Paper Pure to restore its read-only system."
+	fi
 	if [ "$VELLUM_PURGE" = "1" ]; then
 		rm -rf /home/root/.config/klaus-remarkable
 	fi
 }
 
-sha512sums='29ff934f27cc1dfff0b5ebf193d8929c2684a77f94fea5224d315164a3fb33e139c685b7ec373e2553b3b79488f097ae75460867ec2befab9de94a5f55a5522d  klaus-remarkable.service
-b21e012d9ce8c4b4cd3c6b94b336465e6b44a4d5c377b6bc6e0b4a39a47eaa739b7a73e35e03c641a928e26a53cfa93915aeff8a37f9ac31928d2cc00a1aacd3  klaus-remarkable-pairing'
+sha512sums='233d85b24a9065ad26a10ae3d1669c54217cb6a6fdf2d5a4402ad9e71816b15cf832baf7a31b6130cb0b763638130ff5a06ac104f6699bfc385294cd38fdecb6  klaus-remarkable.service
+b21e012d9ce8c4b4cd3c6b94b336465e6b44a4d5c377b6bc6e0b4a39a47eaa739b7a73e35e03c641a928e26a53cfa93915aeff8a37f9ac31928d2cc00a1aacd3  klaus-remarkable-pairing
+9b552c0d51d2deec250b447241d6e3b143dea57081ee7fd455c39522910f341fd76b48edb103a7f601147eb18254e1ef0027ece05421a2c831fe384554ae485d  klaus-remarkable-prepare'

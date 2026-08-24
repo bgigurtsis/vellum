@@ -6,6 +6,7 @@ Wants=xochitl.service
 [Service]
 Type=simple
 EnvironmentFile=/home/root/.config/klaus-remarkable/service.env
+ExecStartPre=/home/root/.vellum/bin/klaus-remarkable-prepare
 ExecStart=/home/root/.vellum/bin/goMarkableStream
 Restart=on-failure
 RestartSec=3
