@@ -1,0 +1,89 @@
+maintainer="Billy Gigurtsis <bgigurtsis@users.noreply.github.com>"
+pkgname=klaus-remarkable
+pkgver=0.1.0
+pkgrel=0
+upstream_author="bgigurtsis"
+category="utilities"
+pkgdesc="Manage the Paper Pure screenshot service used by Klaus"
+url="https://github.com/bgigurtsis/Klaus"
+arch="aarch64"
+license="MIT"
+depends="gomarkablestream-paperpure mount-utils !rm1 !rm2 !rmpp !rmppm remarkable-os>=3.27 remarkable-os<3.28"
+readmeurl="https://github.com/bgigurtsis/Klaus#remarkable-paper-pure"
+
+source="
+klaus-remarkable.service
+klaus-remarkable-pairing
+"
+
+package() {
+	install -Dm644 "$srcdir"/klaus-remarkable.service \
+		"$pkgdir"/home/root/.vellum/share/klaus-remarkable/klaus-remarkable.service
+	install -Dm755 "$srcdir"/klaus-remarkable-pairing \
+		"$pkgdir"/home/root/.vellum/bin/klaus-remarkable-pairing
+}
+
+install_service() {
+	/home/root/.vellum/bin/mount-rw
+	install -Dm644 \
+		/home/root/.vellum/share/klaus-remarkable/klaus-remarkable.service \
+		/etc/systemd/system/klaus-remarkable.service
+	systemctl daemon-reload
+	systemctl enable --now klaus-remarkable.service
+	/home/root/.vellum/bin/mount-restore
+}
+
+ensure_credentials() {
+	config_dir=/home/root/.config/klaus-remarkable
+	config=$config_dir/service.env
+	if [ -s "$config" ]; then
+		return
+	fi
+	umask 077
+	mkdir -p "$config_dir"
+	password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+	cat > "$config" <<EOF
+RK_SERVER_BIND_ADDR=:2001
+RK_SERVER_USERNAME=klaus
+RK_SERVER_PASSWORD=$password
+RK_HTTPS=true
+RK_TLS_AUTO_GENERATE=true
+RK_TLS_CERT_DIR=$config_dir/certs
+RK_JWT_ENABLED=true
+RK_JWT_SECRET_DIR=$config_dir/secrets
+RK_JWT_TOKEN_LIFETIME=1h
+RK_TAILSCALE_ENABLED=false
+EOF
+	chmod 600 "$config"
+}
+
+postinstall() {
+	ensure_credentials
+	install_service
+	echo
+	/home/root/.vellum/bin/klaus-remarkable-pairing
+}
+
+postupgrade() {
+	ensure_credentials
+	install_service
+	systemctl try-restart klaus-remarkable.service
+}
+
+postosupgrade() {
+	install_service
+}
+
+predeinstall() {
+	systemctl disable --now klaus-remarkable.service 2>/dev/null || true
+	/home/root/.vellum/bin/mount-rw
+	rm -f /etc/systemd/system/klaus-remarkable.service
+	systemctl daemon-reload
+	/home/root/.vellum/bin/mount-restore
+	if [ "$VELLUM_PURGE" = "1" ]; then
+		rm -rf /home/root/.config/klaus-remarkable
+	fi
+}
+
+sha512sums='29ff934f27cc1dfff0b5ebf193d8929c2684a77f94fea5224d315164a3fb33e139c685b7ec373e2553b3b79488f097ae75460867ec2befab9de94a5f55a5522d  klaus-remarkable.service
+b21e012d9ce8c4b4cd3c6b94b336465e6b44a4d5c377b6bc6e0b4a39a47eaa739b7a73e35e03c641a928e26a53cfa93915aeff8a37f9ac31928d2cc00a1aacd3  klaus-remarkable-pairing'
